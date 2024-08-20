@@ -6,9 +6,9 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+display-interface-spi = "0.5.0"
 embedded-graphics = "0.8.1"
 embedded-hal-bus = "0.2.0"
-epd-waveshare = { git = "https://github.com/caemor/epd-waveshare.git" }
 esp-backtrace = { version = "0.13.0", features = [
     "esp32c6",
     "exception-handler",
@@ -18,6 +18,9 @@ esp-backtrace = { version = "0.13.0", features = [
 esp-hal = { version = "0.19.0", features = [ "esp32c6", "embedded-hal"] }
 esp-println = { version = "0.10.0", default-features = false, features = ["esp32c6", "log", "jtag-serial"] }
 log = { version = "0.4.21" }
+profont = "0.7.0"
+weact-studio-epd = { version = "0.1.1", features = ["blocking"] }
+
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization

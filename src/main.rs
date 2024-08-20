@@ -11,14 +11,18 @@ use esp_hal::{
     spi::{master::Spi, SpiMode},
     system::SystemControl,
 };
-
-use embedded_graphics::{
-    pixelcolor::BinaryColor::On as Black,
-    prelude::*,
-    primitives::{Line, PrimitiveStyle},
-};
-use epd_waveshare::{epd2in9bc::*, prelude::*};
 use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_graphics::{
+    text::Text, text::TextStyle, geometry::Point, mono_font::MonoTextStyle, Drawable,
+};
+use profont::PROFONT_24_POINT;
+use weact_studio_epd::graphics::{Display290TriColor, DisplayTriColor};
+use weact_studio_epd::{
+    graphics::{buffer_len, DisplayRotation},
+    TriColor, WeActStudio290TriColorDriver,
+};
+use display_interface_spi::SPIInterface;
+
 
 // epaper connections:
 // DC: 21, RST: 22, BUSY: 23, CS/SS: 15, SCK: 6, MISO: -1, MOSI: 7
@@ -62,40 +66,23 @@ fn main() -> ! {
     let rst = Output::new(rst, Level::High);
 
     log::info!("Intializing SPI Device...");
-    let mut spi_device = ExclusiveDevice::new(spi_bus, cs, delay).expect("SPI device initialize error");
+    let spi_device = ExclusiveDevice::new(spi_bus, cs, delay).expect("SPI device initialize error");
+    let spi_interface = SPIInterface::new(spi_device, dc);
 
     // Setup EPD
     log::info!("Intializing EPD...");
-    let mut epd = Epd2in9bc::new(&mut spi_device, busy, dc, rst, &mut delay, None).expect("eink initialize error");
-    log::info!("Initialized EPD.");
+    let mut driver = WeActStudio290TriColorDriver::new(spi_interface, busy, rst, delay);
+    let mut display = Display290TriColor::new();
+    display.set_rotation(DisplayRotation::Rotate90);
+    driver.init().unwrap();
+    log::info!("Display initialized.");
 
-    // Use display graphics from embedded-graphics
-    // This display is for the black/white pixels
-    let mut mono_display = Display2in9bc::default();
-
-    // Use embedded graphics for drawing
-    // A black line
-    let _ = Line::new(Point::new(0, 120), Point::new(0, 200))
-        .into_styled(PrimitiveStyle::with_stroke(Black, 1))
-        .draw(&mut mono_display.color_converted());
-
-    // Use a second display for red/yellow
-    let mut chromatic_display = Display2in9bc::default();
-
-    // We use `Black` but it will be shown as red/yellow
-    let _ = Line::new(Point::new(15, 120), Point::new(15, 200))
-        .into_styled(PrimitiveStyle::with_stroke(Black, 1))
-        .draw(&mut chromatic_display.color_converted());
-
-    // Display updated frame
-    epd.update_color_frame(
-        &mut spi_device,
-        &mut delay,
-        &mono_display.buffer(),
-        &chromatic_display.buffer()
-    ).unwrap();
-    log::info!("Display...");
-    epd.display_frame(&mut spi_device, &mut delay).unwrap();
+    // Write hello world
+    let style = MonoTextStyle::new(&PROFONT_24_POINT, TriColor::Black);
+    let _ = Text::with_text_style("Hello World", Point::new(8, 40), style, TextStyle::default()).draw(&mut display);
+    
+    // Update display
+    driver.full_update(display).unwrap();
 
     loop {
         log::info!("Hello world!");
