@@ -5,7 +5,7 @@ use esp_backtrace as _;
 use esp_hal::{
     clock::ClockControl,
     delay::Delay,
-    gpio::{Input, Io, Level, Output, NO_PIN},
+    gpio::{Input, Io, Level, Output, Pull, NO_PIN},
     peripherals::Peripherals,
     prelude::*,
     spi::{master::Spi, SpiMode},
@@ -13,15 +13,11 @@ use esp_hal::{
 };
 
 use embedded_graphics::{
-    pixelcolor::BinaryColor::On as Black,
-    prelude::*,
-    primitives::{Line, PrimitiveStyle},
+    geometry::Point, mono_font::MonoTextStyle, text::{Text, TextStyle}, Drawable,
 };
-use epd_waveshare::{epd2in9bc::*, prelude::*};
+use profont::PROFONT_24_POINT;
+use epd_waveshare::{epd2in9_v2::*, prelude::*};
 use embedded_hal_bus::spi::ExclusiveDevice;
-
-// epaper connections:
-// DC: 21, RST: 22, BUSY: 23, CS/SS: 15, SCK: 6, MISO: -1, MOSI: 7
 
 #[entry]
 fn main() -> ! {
@@ -35,14 +31,14 @@ fn main() -> ! {
 
     log::info!("Intializing SPI Bus...");
 
-    let sclk = io.pins.gpio6;
-    let mosi = io.pins.gpio7;
-    let cs = io.pins.gpio15;
-    let dc = io.pins.gpio21;
-    let rst = io.pins.gpio22;
-    let busy = io.pins.gpio23;
+    let sclk = io.pins.gpio19; // D8 / GPIO19
+    let mosi = io.pins.gpio18; // D10 / GPIO18
+    let cs = io.pins.gpio20; // D9 / GPIO20
+    let dc = io.pins.gpio21; // D3 / GPIO21
+    let rst = io.pins.gpio22; // D4 / GPIO22
+    let busy = io.pins.gpio23; // D5 / GPIO23
 
-    let mut spi_bus = Spi::new(peripherals.SPI2, 100.kHz(), SpiMode::Mode0, &clocks).with_pins(
+    let spi_bus = Spi::new(peripherals.SPI2, 100.kHz(), SpiMode::Mode0, &clocks).with_pins(
         Some(sclk),
         Some(mosi),
         NO_PIN,
@@ -57,7 +53,7 @@ fn main() -> ! {
         RST: OutputPin,
     */
     let cs = Output::new(cs, Level::High);
-    let busy = Input::new(busy, esp_hal::gpio::Pull::Up);
+    let busy = Input::new(busy, Pull::Down);
     let dc = Output::new(dc, Level::Low);
     let rst = Output::new(rst, Level::High);
 
@@ -66,36 +62,28 @@ fn main() -> ! {
 
     // Setup EPD
     log::info!("Intializing EPD...");
-    let mut epd = Epd2in9bc::new(&mut spi_device, busy, dc, rst, &mut delay, None).expect("eink initialize error");
+    let mut epd = Epd2in9::new(&mut spi_device, busy, dc, rst, &mut delay, None).expect("eink initialize error");
     log::info!("Initialized EPD.");
 
     // Use display graphics from embedded-graphics
-    // This display is for the black/white pixels
-    let mut mono_display = Display2in9bc::default();
+    let mut display = Display2in9::default();
 
-    // Use embedded graphics for drawing
-    // A black line
-    let _ = Line::new(Point::new(0, 120), Point::new(0, 200))
-        .into_styled(PrimitiveStyle::with_stroke(Black, 1))
-        .draw(&mut mono_display.color_converted());
+    // Write hello world
+    let black_style = MonoTextStyle::new(&PROFONT_24_POINT, Color::Black);
+    let _ = Text::with_text_style("Hello World!", Point::new(8, 40), black_style, TextStyle::default()).draw(&mut display);
 
-    // Use a second display for red/yellow
-    let mut chromatic_display = Display2in9bc::default();
-
-    // We use `Black` but it will be shown as red/yellow
-    let _ = Line::new(Point::new(15, 120), Point::new(15, 200))
-        .into_styled(PrimitiveStyle::with_stroke(Black, 1))
-        .draw(&mut chromatic_display.color_converted());
 
     // Display updated frame
-    epd.update_color_frame(
-        &mut spi_device,
-        &mut delay,
-        &mono_display.buffer(),
-        &chromatic_display.buffer()
-    ).unwrap();
     log::info!("Display...");
+    epd.update_frame(&mut spi_device, &display.buffer(), &mut delay).unwrap();
     epd.display_frame(&mut spi_device, &mut delay).unwrap();
+
+    // Sleep for 2 seconds
+    delay.delay(2_000.millis());
+
+    // Set the EPD to sleep
+    log::info!("Sleeping EPD...");
+    epd.sleep(&mut spi_device, &mut delay).unwrap();
 
     loop {
         log::info!("Hello world!");
