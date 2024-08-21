@@ -16,16 +16,12 @@ use embedded_graphics::{
     text::Text, text::TextStyle, geometry::Point, mono_font::MonoTextStyle, Drawable,
 };
 use profont::PROFONT_24_POINT;
-use weact_studio_epd::graphics::{Display290TriColor, DisplayTriColor};
+use weact_studio_epd::{graphics::Display290BlackWhite, Color};
 use weact_studio_epd::{
-    graphics::{buffer_len, DisplayRotation},
-    TriColor, WeActStudio290TriColorDriver,
+    graphics::DisplayRotation, 
+    WeActStudio290BlackWhiteDriver,
 };
 use display_interface_spi::SPIInterface;
-
-
-// epaper connections:
-// DC: 21, RST: 22, BUSY: 23, CS/SS: 15, SCK: 6, MISO: -1, MOSI: 7
 
 #[entry]
 fn main() -> ! {
@@ -39,12 +35,12 @@ fn main() -> ! {
 
     log::info!("Intializing SPI Bus...");
 
-    let sclk = io.pins.gpio6;
-    let mosi = io.pins.gpio7;
-    let cs = io.pins.gpio15;
-    let dc = io.pins.gpio21;
-    let rst = io.pins.gpio22;
-    let busy = io.pins.gpio23;
+    let sclk = io.pins.gpio19; // D8 / GPIO19
+    let mosi = io.pins.gpio18; // D10 / GPIO18
+    let cs = io.pins.gpio20; // D9 / GPIO20
+    let dc = io.pins.gpio21; // D3 / GPIO21
+    let rst = io.pins.gpio22; // D4 / GPIO22
+    let busy = io.pins.gpio23; // D5 / GPIO23
 
     let mut spi_bus = Spi::new(peripherals.SPI2, 100.kHz(), SpiMode::Mode0, &clocks).with_pins(
         Some(sclk),
@@ -71,20 +67,18 @@ fn main() -> ! {
 
     // Setup EPD
     log::info!("Intializing EPD...");
-    let mut driver = WeActStudio290TriColorDriver::new(spi_interface, busy, rst, delay);
-    let mut display = Display290TriColor::new();
+    let mut driver = WeActStudio290BlackWhiteDriver::new(spi_interface, busy, rst, delay);
+    let mut display = Display290BlackWhite::new();
     display.set_rotation(DisplayRotation::Rotate90);
     driver.init().unwrap();
     log::info!("Display initialized.");
 
     // Write hello world
-    let black_style = MonoTextStyle::new(&PROFONT_24_POINT, TriColor::Black);
-    let red_style = MonoTextStyle::new(&PROFONT_24_POINT, TriColor::Red);
+    let black_style = MonoTextStyle::new(&PROFONT_24_POINT, Color::Black);
     let _ = Text::with_text_style("Hello World!", Point::new(8, 40), black_style, TextStyle::default()).draw(&mut display);
-    let _ = Text::with_text_style("Hello World!", Point::new(8, 80), red_style, TextStyle::default()).draw(&mut display);
     
     // Update display
-    driver.full_update(display).unwrap();
+    driver.full_update(&display).unwrap();
 
     loop {
         log::info!("Hello world!");
